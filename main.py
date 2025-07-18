@@ -1,5 +1,7 @@
+# %%
 import streamlit as st
 import pandas as pd
+import requests
 
 def calc_general_stats(df: pd.DataFrame):
     df_data = df.groupby(by="Data")[["Valor"]].sum()
@@ -19,7 +21,19 @@ def calc_general_stats(df: pd.DataFrame):
     df_data = df_data.drop("lag_1", axis=1)
 
     return df_data
+# %%
+def get_selic():
+    url = "https://www.bcb.gov.br/api/servico/sitebcb/historicotaxasjuros"
+    resp = requests.get(url)
+    df = pd.DataFrame(resp.json()["conteudo"])
+    df["DataInicioVigencia"] = 
 
+
+
+    return df
+
+get_selic()
+# %%
 st.set_page_config(page_title="Finanças", page_icon="💰")
 
 st.markdown("""
@@ -126,12 +140,19 @@ if file_upload:
         data_inicio_meta = col1.date_input("Início de Meta", max_value=df_stats.index.max())  
         data_filtrada = df_stats.index[df_stats.index <= data_inicio_meta][-1]
 
-        salario_bruto = col1.number_input("Salário Bruto:",min_value=0., format="%.2f")
-        salario_liquido = col1.number_input("Sálario Líquido:",min_value=0., format="%.2f")
-        custos_fixos = col2.number_input("Custos Fixos:",min_value=0., format="%.2f")
+        salario_bruto = col2.number_input("Salário Bruto:",min_value=0., format="%.2f")
+        salario_liquido = col2.number_input("Sálario Líquido:",min_value=0., format="%.2f")
+        custos_fixos = col1.number_input("Custos Fixos:",min_value=0., format="%.2f")
 
         valor_inicio = df_stats.loc[data_inicio_meta]["Valor"]
         col1.markdown(f"**Valor Início da Meta**: R$ {valor_inicio:.2f}")
+
+        selic_gov = get_selic()
+        filter_selic_date = (selic_gov["DataInicioVigencia"] < data_inicio_meta) & (selic_gov["DataInicioVigencia"] > )    
+        selic_default = selic_gov[filter_selic_date]["MetaSelic"].iloc[0]
+
+        selic = st.number_input("Selic:", min_value=0., value=15.00, format="%.2f")
+        selic = selic / 100
 
         col1_pot, col2_pot = st.columns(2)
         mensal = salario_liquido - custos_fixos
@@ -153,5 +174,9 @@ if file_upload:
             with col2_meta:
                 patrimonio_final = meta_estipulada + anual
                 st.markdown(f"Patrimônio Estimado pós meta:\n\n R$ {patrimonio_final:.2f}")
+
+
 # Não tem arquivos...
 
+
+# %%
