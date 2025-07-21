@@ -1,7 +1,19 @@
-# %%
 import streamlit as st
 import pandas as pd
 import requests
+import datetime
+
+@st.cache_data(ttl="1day")
+
+def get_selic():
+    url = "https://www.bcb.gov.br/api/servico/sitebcb/historicotaxasjuros"
+    resp = requests.get(url)
+    df = pd.DataFrame(resp.json()["conteudo"])
+    df["DataInicioVigencia"] = pd.to_datetime(df["DataInicioVigencia"]).dt.date
+    df["DataFimVigencia"] = pd.to_datetime(df["DataFimVigencia"]).dt.date
+    df["DataFimVigencia"] = df["DataFimVigencia"].fillna(datetime.datetime.today().date())
+    
+    return df
 
 def calc_general_stats(df: pd.DataFrame):
     df_data = df.groupby(by="Data")[["Valor"]].sum()
@@ -21,19 +33,60 @@ def calc_general_stats(df: pd.DataFrame):
     df_data = df_data.drop("lag_1", axis=1)
 
     return df_data
-# %%
-def get_selic():
-    url = "https://www.bcb.gov.br/api/servico/sitebcb/historicotaxasjuros"
-    resp = requests.get(url)
-    df = pd.DataFrame(resp.json()["conteudo"])
-    df["DataInicioVigencia"] = 
+
+def main_metas():
+    col1, col2 = st.columns(2)
 
 
+    data_inicio_meta = col1.date_input("Início de Meta", max_value=df_stats.index.max())  
+    st.text(data_inicio_meta)
+    data_filtrada = df_stats.index[df_stats.index <= data_inicio_meta][-1]
 
-    return df
+    custos_fixos = col1.number_input("Custos Fixos:",min_value=0., format="%.2f")
+    salario_bruto = col2.number_input("Salário Bruto:",min_value=0., format="%.2f")
+    salario_liquido = col2.number_input("Sálario Líquido:",min_value=0., format="%.2f")
+        
 
-get_selic()
-# %%
+    valor_inicio = df_stats.loc[data_inicio_meta]["Valor"]
+    col1.markdown(f"**Valor Início da Meta**: R$ {valor_inicio:.2f}")
+
+    selic_gov = get_selic()
+    filter_selic_date = (selic_gov["DataInicioVigencia"] < data_inicio_meta) & (selic_gov["DataFimVigencia"] > data_inicio_meta)    
+    selic_default = selic_gov[filter_selic_date]["MetaSelic"].iloc[0]
+
+    selic = st.number_input("Selic:", min_value=0., value=15.00, format="%.2f")
+    selic_ano = selic / 100
+    selic_mes = (selic_ano + 1) ** (1/12) -1
+        
+    rendimento_ano = valor_inicio * selic_ano
+    rendimento_mes = valor_inicio * selic_mes
+
+    col1_pot, col2_pot = st.columns(2)
+    mensal = salario_liquido - custos_fixos + rendimento_mes
+    anual = 12* (salario_liquido - custos_fixos) + rendimento_ano
+
+    with col1_pot.container(border=True):
+        st.markdown(f"**Potencial de Arrecadação mês**:\n\n R${mensal:.2f}",
+                    help = f"{salario_liquido:.2f} + (-{custos_fixos:.2f}) + {rendimento_mes:.2f}")
+            
+
+    with col2_pot.container(border=True):
+        st.markdown(f"**Potencial de Arrecadação anual**:\n\n R${anual:.2f}",
+                    help= f"12*({salario_liquido:.2f} + (-{custos_fixos:.2f}) + {rendimento_mes:.2f})")
+
+    with st.container(border=True):
+        col1_meta, col2_meta = st.columns(2)
+
+        with col1_meta:
+            meta_estipulada = st.number_input("Meta Estipulada", min_value=-9999999., format="%.2f", value=anual)
+
+
+        with col2_meta:
+            patrimonio_final = meta_estipulada + valor_inicio
+            st.markdown(f"Patrimônio Estimado pós meta:\n\n R$ {patrimonio_final:.2f}")
+
+    return data_inicio_meta, valor_inicio, meta_estipulada, patrimonio_final
+
 st.set_page_config(page_title="Finanças", page_icon="💰")
 
 st.markdown("""
@@ -134,49 +187,38 @@ if file_upload:
 
 
     with st.expander("Metas"):
+        tab_main, tab_data_meta, tab_graph = st.tabs(tabs=["Configuração", "Dados", "Gráficos"])
 
-        col1, col2 = st.columns(2)
+        with tab_main:
+            data_inicio_meta, valor_inicio, meta_estipulada, patrimonio_final = main_metas()
 
-        data_inicio_meta = col1.date_input("Início de Meta", max_value=df_stats.index.max())  
-        data_filtrada = df_stats.index[df_stats.index <= data_inicio_meta][-1]
+        with tab_data_meta:
+            meses = pd.DataFrame({
+                "Data Referência": [(data_inicio_meta + pd.DateOffset(months=i)) for i in range(1,13)],
+                "Meta Mensal": [valor_inicio + round(meta_estipulada/12,2) * i for i in range(1,13)]
+            })
+            meses["Data Referência"] = meses["Data Referência"].dt.strftime("%Y-%m")
+            df_patrimonio = df_stats.reset_index()[["Data", "Valor"]]
+            df_patrimonio["Data Referência"] = pd.to_datetime(df_patrimonio["Data"]).dt.strftime("%Y-%m")
+            meses = meses.merge(df_patrimonio, how='left', on='Data Referência')
 
-        salario_bruto = col2.number_input("Salário Bruto:",min_value=0., format="%.2f")
-        salario_liquido = col2.number_input("Sálario Líquido:",min_value=0., format="%.2f")
-        custos_fixos = col1.number_input("Custos Fixos:",min_value=0., format="%.2f")
+            meses = meses[["Data Referência", "Meta Mensal", "Valor"]]
+            meses["Atingimento (%)"] = meses["Valor"] / meses["Meta Mensal"]
+            meses["Atingimento Ano"] = meses["Valor"] / patrimonio_final
+            meses["Atingimento Esperado"] = meses["Meta Mensal"] / patrimonio_final 
+            meses = meses.set_index("Data Referência")
 
-        valor_inicio = df_stats.loc[data_inicio_meta]["Valor"]
-        col1.markdown(f"**Valor Início da Meta**: R$ {valor_inicio:.2f}")
+            columns_config_meses = {
+                "Meta Mensal": st.column_config.NumberColumn("Meta Mensal", format="R$ %.2f"),
+                "Valor": st.column_config.NumberColumn("Valor", format="R$ %.2f"),
+                "Atingimento (%)": st.column_config.NumberColumn("Atingimento (%)", format='percent'),
+                "Atingimento Ano": st.column_config.NumberColumn("Atingimento Ano", format='percent'),
+                "Atingimento Esperado": st.column_config.NumberColumn("Atingimento Esperado", format='percent'),
 
-        selic_gov = get_selic()
-        filter_selic_date = (selic_gov["DataInicioVigencia"] < data_inicio_meta) & (selic_gov["DataInicioVigencia"] > )    
-        selic_default = selic_gov[filter_selic_date]["MetaSelic"].iloc[0]
+            }
 
-        selic = st.number_input("Selic:", min_value=0., value=15.00, format="%.2f")
-        selic = selic / 100
+            st.dataframe(meses, column_config=columns_config_meses)
 
-        col1_pot, col2_pot = st.columns(2)
-        mensal = salario_liquido - custos_fixos
-        anual = mensal*12
-
-        with col1_pot.container(border=True):
-            st.markdown(f"**Potencial de Arrecadação mês**:\n\n R${mensal:.2f}")
-
-        with col2_pot.container(border=True):
-            st.markdown(f"**Potencial de Arrecadação anual**:\n\n R${anual:.2f}")
-
-        with st.container(border=True):
-            col1_meta, col2_meta = st.columns(2)
-
-            with col1_meta:
-                meta_estipulada = st.number_input("Meta Estipulada", min_value=-9999999., format="%.2f", value=anual)
-
-
-            with col2_meta:
-                patrimonio_final = meta_estipulada + anual
-                st.markdown(f"Patrimônio Estimado pós meta:\n\n R$ {patrimonio_final:.2f}")
-
+        
 
 # Não tem arquivos...
-
-
-# %%
