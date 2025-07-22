@@ -187,7 +187,7 @@ if file_upload:
 
 
     with st.expander("Metas"):
-        tab_main, tab_data_meta, tab_graph = st.tabs(tabs=["Configuração", "Dados", "Gráficos"])
+        tab_main, tab_data_meta = st.tabs(tabs=["Configuração", "Dados"])
 
         with tab_main:
             data_inicio_meta, valor_inicio, meta_estipulada, patrimonio_final = main_metas()
