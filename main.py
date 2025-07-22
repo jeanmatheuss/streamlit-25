@@ -185,8 +185,9 @@ if file_upload:
         ]
         st.line_chart(data=df_stats[rel_cols])
 
-
+    # Expander das Metas
     with st.expander("Metas"):
+        # abas de configuração e dados
         tab_main, tab_data_meta = st.tabs(tabs=["Configuração", "Dados"])
 
         with tab_main:
