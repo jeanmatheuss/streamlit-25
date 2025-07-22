@@ -90,9 +90,9 @@ def main_metas():
 st.set_page_config(page_title="Finanças", page_icon="💰")
 
 st.markdown("""
-# Boas vindas!
+# Aplicativo de Controle Financeiro
 
-## Nosso APP Financeiro!
+## O app que você consegue monitorar e programar suas finanças.
             
 Espero que você curta a experiência da nossa solução para organização financeira.
             
@@ -107,6 +107,7 @@ if file_upload:
     # Leitura dos dados
     df = pd.read_csv(file_upload)
     df["Data"] = pd.to_datetime(df["Data"], format="%d/%m/%Y").dt.date
+
     
     # Exibição dos dados no App
     exp1 = st.expander("Dados Brutos")
